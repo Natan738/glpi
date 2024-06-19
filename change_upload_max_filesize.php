@@ -1,33 +1,47 @@
 <?php
 
-$dbhost=exec("cat /var/www/html/config/config_db.php | grep dbhost | awk '{print $4}' | cut -d\"'\" -f2");
-//echo $dbhost ." - " ;
+// Carrega as configurações do banco de dados do GLPI
+$configFile = '/var/www/html/config/config_db.php';
 
-$dbuser=exec("cat /var/www/html/config/config_db.php | grep dbuser | awk '{print $4}' | cut -d\"'\" -f2");
-//echo $dbuser ." - " ;
+if (file_exists($configFile)) {
+    $configContent = file_get_contents($configFile);
 
-$dbpassword=exec("cat /var/www/html/config/config_db.php | grep dbpassword | awk '{print $4}' | cut -d\"'\" -f2");
-//echo $dbpassword ." - " ;
+    preg_match("/'dbhost'\s*=>\s*'([^']+)/", $configContent, $matches);
+    $dbhost = $matches[1] ?? '';
 
-$dbdefault=exec("cat /var/www/html/config/config_db.php | grep dbdefault | awk '{print $4}' | cut -d\"'\" -f2");
-//echo $dbdefault ." - " ;
+    preg_match("/'dbuser'\s*=>\s*'([^']+)/", $configContent, $matches);
+    $dbuser = $matches[1] ?? '';
 
-$valor=exec("cat /etc/php/7.4/apache2/php.ini | grep max_filesize | awk '{print $3}' | cut -d'M' -f1");
-//echo $valor ." - " ;
+    preg_match("/'dbpassword'\s*=>\s*'([^']+)/", $configContent, $matches);
+    $dbpassword = $matches[1] ?? '';
 
-$link = mysqli_connect($dbhost, $dbuser, $dbpassword, $dbdefault);
+    preg_match("/'dbdefault'\s*=>\s*'([^']+)/", $configContent, $matches);
+    $dbdefault = $matches[1] ?? '';
 
-if($link === false){
-    die("ERROR: Could not connect. " . mysqli_connect_error());
-}
+    // Obtém o valor atual do PHP
+    $phpIniFile = '/etc/php/8.3/apache2/php.ini';
+    $phpIniContent = file_get_contents($phpIniFile);
 
-$sql = "UPDATE $dbdefault.glpi_configs SET value = $valor WHERE glpi_configs.id = 220";
+    preg_match("/upload_max_filesize\s*=\s*([^;]+)/", $phpIniContent, $matches);
+    $uploadMaxSize = trim($matches[1]) ?? '';
 
-if(mysqli_query($link, $sql)){
-    echo "Records were updated successfully.";
+    // Conecta ao banco de dados do GLPI
+    $link = mysqli_connect($dbhost, $dbuser, $dbpassword, $dbdefault);
+
+    if ($link === false) {
+        die("ERROR: Could not connect. " . mysqli_connect_error());
+    }
+
+    // Atualiza o tamanho máximo de upload no banco de dados do GLPI
+    $sql = "UPDATE glpi_configs SET value = '$uploadMaxSize' WHERE name = 'upload_max_filesize'";
+    if (mysqli_query($link, $sql)) {
+        echo "Tamanho máximo de upload atualizado com sucesso para: $uploadMaxSize";
+    } else {
+        echo "ERROR: Não foi possível executar $sql. " . mysqli_error($link);
+    }
+
+    mysqli_close($link);
 } else {
-    echo "ERROR: Could not able to execute $sql. " . mysqli_error($link);
+    echo "Arquivo de configuração do banco de dados do GLPI não encontrado: $configFile";
 }
- 
-mysqli_close($link);
 ?>
